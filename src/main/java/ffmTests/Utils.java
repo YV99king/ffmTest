@@ -38,14 +38,15 @@ public final class Utils {
     public static <T> StructLayout MakeCStruct(final Class<T> clazz){
         final List<MemoryLayout> memberList = new ArrayList<>();
         for (final var field : clazz.getDeclaredFields())
-            memberList.add(getValueLayout(field.getType(), false).withName(field.getName()));
+            memberList.add(getValueLayout(field.getType(), false, false).withName(field.getName()));
         return MakeCStruct(memberList.toArray(new MemoryLayout[0]));
     }
 
     public static FunctionDescriptor MakeCFunctionDescriptor(final Method method) {
-        final MemoryLayout returnLayout = getValueLayout(method.getReturnType(), true);
+        final MemoryLayout returnLayout = getValueLayout(method.getReturnType(), true, false);
         final MemoryLayout[] paramLayouts = Arrays.stream(method.getParameterTypes())
-            .map(paramType -> getValueLayout(paramType, false))
+            .map(paramType -> getValueLayout(paramType, false, true))
+            .filter(t -> t != null)
             .toArray(MemoryLayout[]::new);
 
         return returnLayout == null
@@ -56,9 +57,12 @@ public final class Utils {
         );
     }
 
-    private static MemoryLayout getValueLayout(final Class<?> type, final boolean allowVoid) {
-        var ret = switch (type) {
-            case Class<?> c when c == void.class     -> null;
+    private static MemoryLayout getValueLayout(final Class<?> type, final boolean allowVoid, boolean allowArena) {
+        return switch (type) {
+            case Class<?> c when c == void.class  -> { if (allowVoid) yield null;
+                                                       else throw new IllegalArgumentException("type 'void' is not supported in this context."); }
+            case Class<?> c when c == Arena.class -> { if (allowArena) yield null;
+                                                       else throw new IllegalArgumentException("type 'Arena' is not supported in this context."); }
             case Class<?> c when c == byte.class     || c == Byte.class      -> ValueLayout.JAVA_BYTE;
             case Class<?> c when c == boolean.class  || c == Boolean.class   -> ValueLayout.JAVA_BOOLEAN;
             case Class<?> c when c == short.class    || c == Short.class     -> ValueLayout.JAVA_SHORT;
@@ -68,15 +72,11 @@ public final class Utils {
             case Class<?> c when c == float.class    || c == Float.class     -> ValueLayout.JAVA_FLOAT;
             case Class<?> c when c == double.class   || c == Double.class    -> ValueLayout.JAVA_DOUBLE;
             case Class<?> c when c == MemorySegment.class
-                                 || NativePointer.class.isAssignableFrom(c)  -> ValueLayout.ADDRESS;
+                                 || NativePointer.class.isAssignableFrom(c)
+                                 || c == String.class                        -> ValueLayout.ADDRESS;
             case Class<?> c when c.isArray()       -> throw new IllegalArgumentException("Arrays are not corrently supported");
-            case Class<?> c when c == String.class -> throw new IllegalArgumentException("Strings are not corrently supported");
-            case Class<?> c when c == Arena.class  -> throw new IllegalArgumentException("Arenas are not corrently supported");
             case Class<?> c -> MakeCStruct(c);
         };
-        if (ret == null && !allowVoid)
-            throw new IllegalArgumentException("type 'void' is not supported in this context.");
-        return ret;
     }
 
     // public static @Nullable UnionLayout MakeCUnion(@NonNull MemoryLayout @NonNull... members) {

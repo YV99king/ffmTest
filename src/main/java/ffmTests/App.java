@@ -19,6 +19,7 @@ import java.nio.file.Path;
 import org.jspecify.annotations.Nullable;
 
 import ffmTests.NativePointer.OfLong;
+import ffmTests.StringEncoding.Encoding;
 
 public class App {
     public static void main(String[] args) {
@@ -45,9 +46,9 @@ public class App {
 
         long startTime = System.currentTimeMillis();
         var ptr = new OfLong(arena.allocateFrom(ValueLayout.JAVA_LONG, 42L));
-        //boolean initSuccess = externalLib.initNative(1, "TestName", 3.14, 2.71, true, ptr);
-        externalLib.setPtr(ptr);
-        if (true){//initSuccess) {
+        boolean initSuccess = externalLib.initNative(1, "TestName", 3.14, 2.71, true, ptr);
+        //externalLib.setPtr(ptr);
+        if (initSuccess) {
 
             System.out.println("Native object initialized successfully.");
             System.out.println("ID: " + externalLib.getID());
@@ -59,7 +60,7 @@ public class App {
 
             // Modify values
             externalLib.setID(2);
-            // externalLib.setName("NewName");
+            externalLib.setName("NewName");
             externalLib.setX(1.61);
             externalLib.setY(0.57);
             externalLib.setIsActive(false);
@@ -189,8 +190,8 @@ public class App {
             return new ExternalLib() {
                 private final Arena arena = instanceArena;
 
-                //@Override
-                public boolean initNative(int id, String name, double x, double y, boolean isActive, LongRef ptr) {
+                @Override
+                public boolean initNative(int id, String name, double x, double y, boolean isActive, OfLong ptr) {
                     try {
                         return (boolean) initNativeMH.invoke(
                                 id,
@@ -198,7 +199,7 @@ public class App {
                                 x,
                                 y,
                                 isActive,
-                                ptr.getPointer()
+                                ptr.getSegment()
                         );
                     } catch (Throwable e) {
                         throw new RuntimeException(e);
@@ -278,7 +279,7 @@ public class App {
                         throw new RuntimeException(e);
                     }
                 }
-                //@Override
+                @Override
                 public OfLong getPtr() {
                     MemorySegment ptr;
                     try {
@@ -306,7 +307,7 @@ public class App {
                         throw new RuntimeException(e);
                     }
                 }
-                //@Override
+                @Override
                 public void setName(String name) {
                     MemorySegment nameptr = arena.allocateFrom(name);
                     try {
@@ -339,7 +340,7 @@ public class App {
                         throw new RuntimeException(e);
                     }
                 }
-                //@Override
+                @Override
                 public void setPtr(OfLong ptr) {
                     try {
                         setPtrMH.invoke(ptr.getSegment());
@@ -358,7 +359,7 @@ public class App {
             };
         }
 
-        //boolean initNative(int id, String name, double x, double y, boolean isActive, OfLong ptr);
+        boolean initNative(int id, @StringEncoding(Encoding.UTF8) String name, double x, double y, boolean isActive, OfLong ptr);
         void freeNative();
         //nativeData getNativeData();
         
@@ -371,7 +372,7 @@ public class App {
         long getPtrValue();
 
         void setID(int id);
-        //void setName(String name);
+        void setName(@StringEncoding(Encoding.UTF8) String name);
         void setX(double x);
         void setY(double y);
         void setIsActive(boolean isActive);

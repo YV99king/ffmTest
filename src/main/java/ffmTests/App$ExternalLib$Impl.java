@@ -1,4 +1,4 @@
-package ffmTests;
+/*package ffmTests;
 
 import ffmTests.App.ExternalLib;
 import ffmTests.NativePointer.OfLong;
@@ -211,4 +211,4 @@ public class App$ExternalLib$Impl implements ExternalLib {
          throw new AssertionError(var3);
       }
    }
-}
+}*/

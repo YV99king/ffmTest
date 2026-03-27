@@ -8,7 +8,6 @@ import java.lang.foreign.SymbolLookup;
 import java.lang.invoke.MethodHandle;
 import java.lang.reflect.Field;
 import java.nio.charset.Charset;
-import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 import org.objectweb.asm.ClassWriter;
@@ -147,10 +146,12 @@ public final class NativeObject {
             argIndex++;
         }
 
-        if (methodDesc.getReturnType().getSort() == Type.ARRAY)
+        final var origRetType = methodDesc.getReturnType();
+        if (origRetType.getSort() == Type.ARRAY)
             throw new IllegalStateException("Array types are not supported at this time: " + methodDesc.getReturnType());
-        if (methodDesc.getReturnType().getSort() == Type.OBJECT && !pointerTypes.contains(methodDesc.getReturnType().getClassName()))
+        if (origRetType.getSort() == Type.OBJECT && !pointerTypes.contains(origRetType.getClassName()) && !origRetType.equals(Type.getType(String.class)))
             throw new IllegalStateException("Only primitive types are supported at this time: " + methodDesc.getReturnType());
+
         switch (methodDesc.getReturnType().getSort()) {
             case Type.OBJECT:
                 if (argTypes == null)
@@ -184,7 +185,7 @@ public final class NativeObject {
                 )
             );
             method.mark(tryEnd);
-            transformReturnValue(method, methodDesc, cFuncDesc);
+            transformReturnValue(method, methodDesc, cFuncDesc, methodReflect.getAnnotations());
             method.returnValue();
             
             method.catchException(tryStart, tryEnd, Type.getType(Throwable.class));
@@ -213,21 +214,15 @@ public final class NativeObject {
             int arena = -1;
             if (cFuncDesc.getArgumentTypes().length > 0 && cFuncDesc.getArgumentTypes()[0].equals(Type.getType(Arena.class))) {
                 if (argumentTypes.length == 0 || !argumentTypes[0].equals(Type.getType(Arena.class))) {
-                    final var ofAutoMethod = new Method(
-                        "ofAuto",
+                    /*generateStaticInterfaceCall(method, Type.getType(Arena.class), new Method(
+                        "global",
                         Type.getType(Arena.class),
                         new Type[] {}
-                    );
-                    method.visitMethodInsn(
-                        Opcodes.INVOKESTATIC,
-                        Type.getInternalName(Arena.class),
-                        ofAutoMethod.getName(),
-                        ofAutoMethod.getDescriptor(),
-                        true
-                    ); //allows calling of static methods in interfaces, which is needed for the ofAuto method in the Arena class. method.invokeStatic can only by used on classes.
+                    ));
                     method.dup();
                     arena = method.newLocal(Type.getType(Arena.class)); //TODO: check when an arena is needed
-                    method.storeLocal(arena);
+                    method.storeLocal(arena);*/
+                    throw new IllegalStateException("First argument must be an Arena.");
                 } else {
                     method.loadArg(0);
                     arena = 0;
@@ -238,6 +233,7 @@ public final class NativeObject {
                 final var arg = argumentTypes[i];
                 method.loadArg(i);
                 
+                //#region simple pointer
                 if (pointerTypes.indexOf(arg.getClassName()) > 0) {
                     Method getSegment = new Method(
                         "getSegment",
@@ -248,75 +244,101 @@ public final class NativeObject {
                         method.invokeInterface(arg, getSegment);
                     else
                         method.invokeVirtual(arg, getSegment);
-                } else if (arg.equals(Type.getType(String.class))) {
+                }
+                //#endregion
+                //#region string
+                else if (arg.equals(Type.getType(String.class))) {
                     if (arena == -1) {
-                        final var ofAutoMethod = new Method(
-                            "ofAuto",
+                        generateStaticInterfaceCall(method, Type.getType(Arena.class), new Method(
+                            "global",
                             Type.getType(Arena.class),
                             new Type[] {}
-                        );
-                        method.visitMethodInsn(
-                            Opcodes.INVOKESTATIC,
-                            Type.getInternalName(Arena.class),
-                            ofAutoMethod.getName(),
-                            ofAutoMethod.getDescriptor(),
-                            true
-                        ); //allows calling of static methods in interfaces, which is needed for the ofAuto method in the Arena class. method.invokeStatic can only by used on classes.
-                        arena = method.newLocal(Type.getType(Arena.class)); //TODO: check when an arena is needed
+                        ));
+                        arena = method.newLocal(Type.getType(Arena.class));
                         method.storeLocal(arena);
                     }
                     if (paramAnnotations == null)
                         paramAnnotations = methodReflect.getParameterAnnotations();
-                    final var annotations = List.of(paramAnnotations[i]);
-                    if (paramAnnotations[i].length > 0) {
-                        final var encoding = annotations.stream()
-                            .filter(a -> a instanceof StringEncoding)
-                            .map(a -> (StringEncoding) a)
-                            .findFirst()
-                            .map(StringEncoding::value)
-                            .orElse(Encoding.UTF8);
-                        method.loadLocal(arena);
-                        method.swap();                        method.getStatic(Type.getType(StandardCharsets.class), switch (encoding) {
-                            case ASCII -> "US_ASCII";
-                            case UTF8  -> "UTF_8";
-                            case UTF16 -> "UTF_16";
-                            case UTF32 -> "UTF_32";
-                            default -> throw new IllegalStateException("Unsupported encoding: " + encoding);
-                        }, Type.getType(Charset.class));
-                        method.invokeInterface(Type.getType(Arena.class),
-                            new Method(
-                                "allocateFrom",
-                                Type.getType(MemorySegment.class),
-                                new Type[] { Type.getType(String.class), Type.getType(Charset.class) }
-                            )
-                        );
-                    }
+                    final var encoding = List.of(paramAnnotations[i]).stream()
+                        .filter(a -> a instanceof StringEncoding)
+                        .map(a -> (StringEncoding) a)
+                        .findFirst()
+                        .map(StringEncoding::value)
+                        .orElse(Encoding.UTF8);
+                    method.loadLocal(arena);
+                    method.swap();
+                    method.getStatic(Type.getType(Encoding.class), encoding.name(), Type.getType(Encoding.class));
+                    method.getField(Type.getType(Encoding.class), "encoding", Type.getType(Charset.class));
+                    method.invokeInterface(Type.getType(Arena.class),
+                        new Method(
+                            "allocateFrom",
+                            Type.getType(MemorySegment.class),
+                            new Type[] { Type.getType(String.class), Type.getType(Charset.class) }
+                        )
+                    );
                 }
+                //#endregion
             }
     }
 
-    private static void transformReturnValue(final GeneratorAdapter method, final Method methodDesc, final Method cFuncDesc) {
+    private static void transformReturnValue(final GeneratorAdapter method, final Method methodDesc, final Method cFuncDesc, final Annotation[] annotations) {
         if (methodDesc.getReturnType().equals(cFuncDesc.getReturnType()))
             return;
 
         var retType = methodDesc.getReturnType();
-        if (retType.getSort() == Type.OBJECT && pointerTypes.indexOf(retType.getClassName()) > 0) {
+        //#region simple pointer
+        if (pointerTypes.indexOf(retType.getClassName()) > 0) {
             if (retType.equals(Type.getType(NativePointer.class)))
                 retType = Type.getType(NativePointer.OfVoid.class);
 
-            var retLocal = method.newLocal(retType);
+            final var retLocal = method.newLocal(retType);
             method.newInstance(retType);
             method.dup();
             method.storeLocal(retLocal);
             method.swap();
-            method.invokeConstructor(retType,
-                                     new Method(
-                                         "<init>",
-                                         Type.VOID_TYPE,
-                                         new Type[] { Type.getType(MemorySegment.class) }
-                                     ));
+            method.invokeConstructor(retType, new Method(
+                "<init>",
+                Type.VOID_TYPE,
+                new Type[] { Type.getType(MemorySegment.class) }
+            ));
             method.loadLocal(retLocal);
         }
+        //#endregion
+        //#region string
+        else if (retType.equals(Type.getType(String.class))) {
+            method.push(Long.MAX_VALUE);
+            method.invokeInterface(Type.getType(MemorySegment.class), new Method(
+                "reinterpret", 
+                Type.getType(MemorySegment.class), 
+                new Type[] { Type.LONG_TYPE }
+            ));
+            method.push(0L);
+            final var encoding = List.of(annotations).stream()
+                .filter(a -> a instanceof StringEncoding)
+                .map(a -> (StringEncoding) a)
+                .findFirst()
+                .map(StringEncoding::value)
+                .orElse(Encoding.UTF8);
+            method.getStatic(Type.getType(Encoding.class), encoding.name(), Type.getType(Encoding.class));
+            method.getField(Type.getType(Encoding.class), "encoding", Type.getType(Charset.class));
+            method.invokeInterface(Type.getType(MemorySegment.class), new Method(
+                "getString",
+                Type.getType(String.class),
+                new Type[] { Type.LONG_TYPE, Type.getType(Charset.class) }
+            ));
+        }
+        //#endregion
+    }
+
+    ///allows calling of static methods in interfaces as GenratorAdapter.invokeStatic can only by used on classes.
+    private static void generateStaticInterfaceCall(final GeneratorAdapter method, final Type owner, final Method descriptor) {
+        method.visitMethodInsn(
+            Opcodes.INVOKESTATIC,
+            owner.getInternalName(),
+            descriptor.getName(),
+            descriptor.getDescriptor(),
+            true
+        );
     }
 
     private static void initCFuncField(final ClassWriter cw, final Type implType, 

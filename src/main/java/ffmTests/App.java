@@ -52,7 +52,7 @@ public class App {
 
             System.out.println("Native object initialized successfully.");
             System.out.println("ID: " + externalLib.getID());
-            // System.out.println("Name: " + externalLib.getName());
+            System.out.println("Name: " + externalLib.getName());
             System.out.println("X: " + externalLib.getX());
             System.out.println("Y: " + externalLib.getY());
             System.out.println("Is Active: " + externalLib.getIsActive());
@@ -68,7 +68,7 @@ public class App {
 
             System.out.println("After modifications:");
             System.out.println("ID: " + externalLib.getID());
-            // System.out.println("Name: " + externalLib.getName());
+            System.out.println("Name: " + externalLib.getName());
             System.out.println("X: " + externalLib.getX());
             System.out.println("Y: " + externalLib.getY());
             System.out.println("Is Active: " + externalLib.getIsActive());
@@ -244,7 +244,7 @@ public class App {
                         throw new RuntimeException(e);
                     }
                 }
-                //@Override
+                @Override
                 public String getName() {
                     MemorySegment namePtr;
                     try {
@@ -359,12 +359,12 @@ public class App {
             };
         }
 
-        boolean initNative(int id, @StringEncoding(Encoding.UTF8) String name, double x, double y, boolean isActive, OfLong ptr);
+        boolean initNative(int id, @StringEncoding(Encoding.UTF16LE) String name, double x, double y, boolean isActive, OfLong ptr);
         void freeNative();
         //nativeData getNativeData();
         
         int getID();
-        //String getName();
+        @StringEncoding(Encoding.UTF16) String getName();
         double getX();
         double getY();
         boolean getIsActive();
@@ -372,7 +372,7 @@ public class App {
         long getPtrValue();
 
         void setID(int id);
-        void setName(@StringEncoding(Encoding.UTF8) String name);
+        void setName(@StringEncoding(Encoding.UTF16LE) String name);
         void setX(double x);
         void setY(double y);
         void setIsActive(boolean isActive);

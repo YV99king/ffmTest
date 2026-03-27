@@ -1,5 +1,6 @@
 package ffmTests;
 
+import java.io.File;
 import java.lang.foreign.Arena;
 import java.lang.foreign.FunctionDescriptor;
 import java.lang.foreign.MemoryLayout;
@@ -98,7 +99,8 @@ public final class Utils {
         System.out.println();
     }
     static void DebugDumpclassFile(final byte[] classBytes, final String className) {
-        final var filePath = "debug_dump_" + className.replace('.', '_') + ".class";
+        final var filePath = "debug_dump" + File.separator + System.currentTimeMillis() + "_" + className.replace('.', '_') + ".class";
+        new File(filePath).delete();
         try (var fos = new java.io.FileOutputStream(filePath)) {
             fos.write(classBytes);
         } catch (java.io.IOException e) {

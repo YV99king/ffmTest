@@ -18,6 +18,7 @@ import org.objectweb.asm.commons.GeneratorAdapter;
 import org.objectweb.asm.commons.Method;
 
 import ffmTests.StringEncoding.Encoding;
+import ffmTests.StringEncoding.Endianess;
 
 public final class NativeObject {
     private static final List<String> pointerTypes = List.of(
@@ -259,16 +260,22 @@ public final class NativeObject {
                     }
                     if (paramAnnotations == null)
                         paramAnnotations = methodReflect.getParameterAnnotations();
-                    final var encoding = List.of(paramAnnotations[i]).stream()
+                    final var annotation = List.of(paramAnnotations[i]).stream()
                         .filter(a -> a instanceof StringEncoding)
                         .map(a -> (StringEncoding) a)
-                        .findFirst()
-                        .map(StringEncoding::value)
-                        .orElse(Encoding.UTF8);
+                        .findFirst();
+                    final var encoding = annotation.map(StringEncoding::value).orElse(Encoding.UTF8);
+                    final var endianess = annotation.map(StringEncoding::endianess).orElse(Endianess.PLATFORM_DEFAULT);
                     method.loadLocal(arena);
                     method.swap();
                     method.getStatic(Type.getType(Encoding.class), encoding.name(), Type.getType(Encoding.class));
-                    method.getField(Type.getType(Encoding.class), "encoding", Type.getType(Charset.class));
+                    method.getStatic(Type.getType(Endianess.class), endianess.name(), Type.getType(Endianess.class));
+                    method.invokeVirtual(Type.getType(Encoding.class),
+                        new Method(
+                            "getEncoding",
+                            Type.getType(Charset.class),
+                            new Type[] {Type.getType(Endianess.class)}
+                        ));
                     method.invokeInterface(Type.getType(Arena.class),
                         new Method(
                             "allocateFrom",
@@ -313,14 +320,20 @@ public final class NativeObject {
                 new Type[] { Type.LONG_TYPE }
             ));
             method.push(0L);
-            final var encoding = List.of(annotations).stream()
+            final var annotation = List.of(annotations).stream()
                 .filter(a -> a instanceof StringEncoding)
                 .map(a -> (StringEncoding) a)
-                .findFirst()
-                .map(StringEncoding::value)
-                .orElse(Encoding.UTF8);
+                .findFirst();
+            final var encoding = annotation.map(StringEncoding::value).orElse(Encoding.UTF8);
+            final var endianess = annotation.map(StringEncoding::endianess).orElse(Endianess.PLATFORM_DEFAULT);
             method.getStatic(Type.getType(Encoding.class), encoding.name(), Type.getType(Encoding.class));
-            method.getField(Type.getType(Encoding.class), "encoding", Type.getType(Charset.class));
+            method.getStatic(Type.getType(Endianess.class), endianess.name(), Type.getType(Endianess.class));
+            method.invokeVirtual(Type.getType(Encoding.class),
+                new Method(
+                    "getEncoding",
+                    Type.getType(Charset.class),
+                    new Type[] {Type.getType(Endianess.class)}
+                ));
             method.invokeInterface(Type.getType(MemorySegment.class), new Method(
                 "getString",
                 Type.getType(String.class),

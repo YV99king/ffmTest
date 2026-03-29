@@ -359,7 +359,7 @@ public class App {
             };
         }
 
-        boolean initNative(int id, @StringEncoding(Encoding.UTF16LE) String name, double x, double y, boolean isActive, OfLong ptr);
+        boolean initNative(int id, @StringEncoding(Encoding.UTF16) String name, double x, double y, boolean isActive, OfLong ptr);
         void freeNative();
         //nativeData getNativeData();
         
@@ -372,7 +372,7 @@ public class App {
         long getPtrValue();
 
         void setID(int id);
-        void setName(@StringEncoding(Encoding.UTF16LE) String name);
+        void setName(@StringEncoding(Encoding.UTF16) String name);
         void setX(double x);
         void setY(double y);
         void setIsActive(boolean isActive);
